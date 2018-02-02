@@ -1,0 +1,16 @@
+package com.spd.qhyc.test;
+
+import com.mg.objects.*;
+import com.spd.qhyc.app.ModelMonthJP;
+//import com.weathermap.objects.*;
+
+public class ModelJPTest {
+
+	public static void main(String[] args) {
+		// TODO Auto-generated method stub
+		Workspace ws = new Workspace();
+		ModelMonthJP modelJP = new ModelMonthJP();
+		modelJP.excute(ws, "E:/SC/Data/Prec/month/");
+	}
+
+}

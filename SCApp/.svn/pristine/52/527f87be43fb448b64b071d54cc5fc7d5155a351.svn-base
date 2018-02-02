@@ -1,0 +1,69 @@
+package com.spd.qhyc.app;
+
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.util.Calendar;
+import java.util.List;
+
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
+import com.alibaba.druid.pool.DruidDataSource;
+import com.alibaba.druid.pool.DruidPooledConnection;
+import com.spd.qhyc.config.ConfigHelper;
+import com.spd.qhyc.database.DataSourceSingleton;
+import com.spd.qhyc.model.Config;
+import com.spd.qhyc.util.DateUtil;
+
+public class DynamicEquation {
+	static Logger logger = LogManager.getLogger("mylog");
+	public static void main(String[] args) throws Exception {
+		//需要参数(预报数据年月,预报月份)
+		String elementID = "temp";
+		String strStartDate = "20170901";//预报数据日期
+		int forcastMonth = 10;//预报月份
+		Calendar cal = DateUtil.parse("yyyyMMdd", strStartDate);
+		// 2、连接数据库
+		DruidDataSource dds = DataSourceSingleton.getInstance();
+		DruidPooledConnection dpConn = null;
+		try {
+			dpConn = dds.getConnection();
+		} catch (Exception e) {
+			logger.error(e.getMessage());
+		}
+		// 3、获取配置
+		ConfigHelper configHelper = new ConfigHelper();
+		Config config = configHelper.getConfig();
+		
+		//4、获取观测距平数据
+		int year = cal.get(Calendar.YEAR);
+		int month = cal.get(Calendar.MONTH)+1;
+		List<StationVal> lsObserveData = getObserveJPData(dpConn,elementID,year,month);
+		//5、获取高度场历史平均数据
+		//6、建方程
+		//7、预测
+		//8、入库
+		dpConn.close();
+	}
+	/**
+	 * @throws Exception 
+	 * @作者:杠上花
+	 * @日期:2018年1月15日
+	 * @修改日期:2018年1月15日
+	 * @参数:
+	 * @返回:
+	 * @说明:获取观测距平数据
+	 */
+	private static List<StationVal> getObserveJPData(DruidPooledConnection dpConn,String elementid,int year,int month) throws Exception{
+		String tablename=elementid.equals("temp")?"t_month_temp":"t_month_rain";
+		String sql="select tm.stationname,vhr.stationnum,vhr.longitude,vhr.latitude,round(100*(tm.m%d-vhr.m%d)/vhr.m%d,0) as m%d from %s tm right join v_hos_rain vhr on tm.stationnum=vhr.stationnum where year=%d";
+		sql=String.format(sql, month,month,month,month,tablename,year);
+		PreparedStatement ps=dpConn.prepareStatement(sql);
+		ResultSet rs=ps.executeQuery();
+		DBUtil dbUtil = new DBUtil();
+		List<StationVal> lsResult = dbUtil.populate(rs, StationVal.class);
+		ps.close();
+		return lsResult;
+	}
+}

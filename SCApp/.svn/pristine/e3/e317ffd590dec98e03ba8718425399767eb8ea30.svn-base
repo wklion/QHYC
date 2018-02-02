@@ -1,0 +1,46 @@
+package com.spd.qhyc.model;
+/**
+ * @作者:wangkun
+ * @日期:2017年12月5日
+ * @公司:spd
+ * @说明:
+*/
+public class Config {
+	private int startYear;//开始年
+	private String dataOutputPath;//数据输出目录
+	private String monthPrecJPFileName;//月降水距平文件名
+	private String monthTempJPFileName;//月气温距平文件名
+
+	public String getDataOutputPath() {
+		return dataOutputPath;
+	}
+
+	public void setDataOutputPath(String dataOutputPath) {
+		this.dataOutputPath = dataOutputPath;
+	}
+
+	public int getStartYear() {
+		return startYear;
+	}
+
+	public void setStartYear(int startYear) {
+		this.startYear = startYear;
+	}
+
+	public String getMonthPrecJPFileName() {
+		return monthPrecJPFileName;
+	}
+
+	public void setMonthPrecJPFileName(String monthPrecJPFileName) {
+		this.monthPrecJPFileName = monthPrecJPFileName;
+	}
+
+	public String getMonthTempJPFileName() {
+		return monthTempJPFileName;
+	}
+
+	public void setMonthTempJPFileName(String monthTempJPFileName) {
+		this.monthTempJPFileName = monthTempJPFileName;
+	}
+	
+}

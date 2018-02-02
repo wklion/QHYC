@@ -1,0 +1,83 @@
+package com.spd.qhyc.app;
+
+import java.awt.geom.Rectangle2D;
+
+import org.codehaus.jettison.json.JSONException;
+import org.codehaus.jettison.json.JSONObject;
+
+import com.spd.qhyc.config.ConfigHelper;
+import com.spd.qhyc.model.Config;
+import com.spd.qhyc.util.CommonUtil;
+import com.weathermap.objects.*;
+
+/**
+ * @作者:杠上花
+ * @日期:2018年1月10日
+ * @公司:spd
+ * @说明:
+*/
+public class NcepHgtJP {
+
+	public static void main(String[] args) throws Exception {
+		// TODO Auto-generated method stub
+		ConfigHelper configHelper = new ConfigHelper();
+		Config config = configHelper.getConfig();
+		String hgtAvgPath = config.getHgtAvgPath();
+		int startYear = 1948;
+		int targetMonth = 12;
+		Workspace ws = new Workspace();
+		String strHgtFile = config.getNcepFile();
+		String strJson = String.format("{\"Type\":\"netCDF\",\"Alias\":\"model\",\"Server\":\"%s\"}", strHgtFile);
+		Datasource ds = ws.OpenDatasource(strJson);
+		int size = ds.GetDatasetCount();
+		JSONObject json=null;
+		int month = 1;
+		int year = 1948;
+		CommonUtil commonUtil = new CommonUtil();
+		for(int i=0;i<size;i++){
+			DatasetRaster dr = (DatasetRaster) ds.GetDataset(i);
+			int rows = dr.GetHeight();
+			int cols = dr.GetWidth();
+			String strMeta = dr.GetMetadata();
+			json = new JSONObject(strMeta);
+			int time=json.getInt("NETCDF_DIM_time");
+			int level=json.getInt("NETCDF_DIM_level");
+			if(year>1980&&month==targetMonth){
+				if(level==500){
+					//打开平均
+					String avgFile = hgtAvgPath+targetMonth+".tif";
+					strJson = String.format("{\"Type\":\"GTiff\",\"Alias\":\"avg\",\"Server\":\"%s\"}", avgFile);
+					Datasource dsTif = ws.OpenDatasource(strJson);
+					DatasetRaster drTif = (DatasetRaster) dsTif.GetDataset(0);
+					double[][] result = new double[rows][cols];
+					double[][] drData = commonUtil.ConvertGridToArray(dr);
+					double[][] tifData = commonUtil.ConvertGridToArray(drTif);
+					for(int r=0;r<rows;r++){
+						for(int c=0;c<cols;c++){
+							double drVal = drData[r][c];
+							double avgVal = tifData[r][c];
+							double cha = drVal-avgVal;
+							result[r][c] = cha;
+						}
+					}
+					Rectangle2D r2d = dr.GetBounds();
+					String strTargetMonth = targetMonth<10?"0"+targetMonth:targetMonth+"";
+					String outputFile = config.getHgtJPPath()+year+""+strTargetMonth+".tif";
+					commonUtil.makeTif(ws,outputFile,result,r2d);
+					ws.CloseDatasource("avg");
+				}
+			}
+			if(level ==10){//最小
+				month++;
+			}
+			if(month>12){
+				month=1;
+				year++;
+			}
+		}
+		ws.CloseDatasource("model");
+		ws.Destroy();
+		System.out.println("over");
+	}
+
+}

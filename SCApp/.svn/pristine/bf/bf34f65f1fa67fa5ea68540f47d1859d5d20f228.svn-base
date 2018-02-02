@@ -1,0 +1,59 @@
+package com.spd.qhyc.model;
+/**
+ * @作者:wangkun
+ * @日期:2017年12月28日
+ * @公司:spd
+ * @说明:
+*/
+public class ForcastData {
+	private int id;
+	private String method;
+	private String makeDate;
+	private int forecastYear;
+	private int forecastMonth;
+	private String stationNum;
+	private double val;
+    public int getId() {
+        return id;
+    }
+    public void setId(int id) {
+        this.id = id;
+    }
+    public String getMethod() {
+        return method;
+    }
+    public void setMethod(String method) {
+        this.method = method;
+    }
+    public String getMakeDate() {
+        return makeDate;
+    }
+    public void setMakeDate(String makeDate) {
+        this.makeDate = makeDate;
+    }
+    public int getForecastYear() {
+        return forecastYear;
+    }
+    public void setForecastYear(int forecastYear) {
+        this.forecastYear = forecastYear;
+    }
+    public int getForecastMonth() {
+        return forecastMonth;
+    }
+    public void setForecastMonth(int forecastMonth) {
+        this.forecastMonth = forecastMonth;
+    }
+    public String getStationNum() {
+        return stationNum;
+    }
+    public void setStationNum(String stationNum) {
+        this.stationNum = stationNum;
+    }
+    public double getVal() {
+        return val;
+    }
+    public void setVal(double val) {
+        this.val = val;
+    }
+	
+}

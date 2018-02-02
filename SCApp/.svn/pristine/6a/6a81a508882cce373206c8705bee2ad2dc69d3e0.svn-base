@@ -1,0 +1,213 @@
+package com.spd.qhyc.app;
+
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.util.Calendar;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+import javax.xml.parsers.DocumentBuilder;
+
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
+import com.alibaba.druid.pool.DruidDataSource;
+import com.alibaba.druid.pool.DruidPooledConnection;
+import com.mg.objects.Workspace;
+import com.spd.qhyc.application.WorkspaceHelper;
+import com.spd.qhyc.config.ConfigHelper;
+import com.spd.qhyc.database.DataSourceSingleton;
+import com.spd.qhyc.model.Config;
+import com.spd.qhyc.model.ForcastData;
+import com.spd.qhyc.model.MonthAvg;
+import com.spd.qhyc.model.MonthData;
+import com.spd.qhyc.model.XNStation;
+import com.spd.qhyc.service.TestService;
+import com.spd.qhyc.util.CommonUtil;
+import com.spd.qhyc.util.DBUtil;
+import com.spd.qhyc.util.DateUtil;
+import com.spd.qhyc.util.GridUtil;
+import com.spd.qhyc.util.StationUtil;
+
+/**
+ * @作者:wangkun
+ * @日期:2017年12月27日
+ * @公司:spd
+ * @说明:
+*/
+public class PsTestOfMonth {
+	static Logger logger = LogManager.getLogger("mylog");
+	public static void main(String[] args) throws Exception {
+		System.out.println("降水Ps检验");
+		Workspace ws = WorkspaceHelper.getWorkspace();
+		String[] areaCodes = {"5","50","51","52","53","54"};
+		String[] methods = {"动力方程","EOF-CCA"};
+		String testName = "PS";
+		//1、初始化时间
+		Calendar cal = Calendar.getInstance();
+		if(args.length>0){
+			DateUtil dateUtil = new DateUtil(); 
+			cal = dateUtil.parse("yyyyMM", args[0]);
+		}
+		else {
+			//cal.add(Calendar.MONTH, -1);
+			cal.set(Calendar.YEAR, 2017);
+			cal.set(Calendar.MONTH	, 11);
+		}
+		int year = cal.get(Calendar.YEAR);
+		int month = cal.get(Calendar.MONTH)+1;
+		String strForecastDate = DateUtil.format("yyyyMM", cal);
+		//2、连接数据库
+		DruidDataSource dds = DataSourceSingleton.getInstance();
+		DruidPooledConnection dpConn = null;
+		try {
+			dpConn = dds.getConnection();
+		} catch (Exception e) {
+			e.printStackTrace();
+		}
+		//3、获取站点
+		StationUtil stationUtil = new StationUtil();
+		List<XNStation> lsXNStation = stationUtil.GetXNSatation("", dpConn);
+		// 4、获取配置
+		ConfigHelper configHelper = new ConfigHelper();
+		Config config = configHelper.getConfig();
+		
+		String[] elementIDs = {"temp","prec"};
+		GridUtil gridUtil = new GridUtil();
+		CommonUtil commonUtil = new CommonUtil();
+		TestService testService = new TestService();
+		for(String elementID:elementIDs) {
+			logger.info(elementID+"--Ps检验");
+			//5、获取观测数据
+			Map<String,Double> mapObv = testService.getObvData(elementID,year,month,dpConn);
+			if(mapObv==null || mapObv.size()<1) {
+				logger.info("观测数据为空！");
+				continue;
+			}
+			//6、获取平均数据
+			double[] avgData = gridUtil.getHosMonthAvg(ws, month, config, lsXNStation, elementID);
+			if(avgData==null || avgData.length<1) {
+				logger.info("历史平均数据为空！");
+				continue;
+			}
+			//7、计算距平
+			Map<String,Double> mapJP = testService.calJP(elementID,mapObv,avgData,lsXNStation);
+			//8、获取预报数据
+			for(String method:methods) {
+				Calendar tempCalMake = (Calendar) cal.clone();
+				for(int mon=0;mon<13;mon++) {//过去13个月资料时间
+					String strMakeDate = DateUtil.format("yyyy-MM-01", tempCalMake);
+					tempCalMake.add(Calendar.MONTH,-1);
+					Map<String,Double> mapForecastData = testService.getForecastData(elementID,cal,dpConn,method,strMakeDate);
+					if(mapForecastData==null || mapForecastData.size()<1) {
+						logger.info(strMakeDate+"--"+strForecastDate+"预报数据为空！");
+						continue;
+					}
+					for(String areaCode:areaCodes) {
+						//筛选数据
+						Map<String,Double> curMapJP = new HashMap();
+						Map<String,Double> curMapForecast = new HashMap();
+						for(XNStation station:lsXNStation) {
+							String thisAreaCode = station.getAdmin_Code_CHN();
+							if(!thisAreaCode.startsWith(areaCode)) {
+								continue;
+							}
+							String sn = station.getStation_Id_C();
+							Double jpVal = mapJP.get(sn);
+							Double forecastVal = mapForecastData.get(sn);
+							if(jpVal==null || jpVal==-9999 || forecastVal==null || forecastVal==-9999 ) {
+								continue;
+							}
+							curMapJP.put(sn, jpVal);
+							curMapForecast.put(sn, forecastVal);
+						}
+						int n = curMapJP.size();
+						int n0 = commonUtil.getN0(curMapJP, curMapForecast);
+						int n1 = commonUtil.getN1(curMapJP, curMapForecast,elementID);
+						int n2 = commonUtil.getN2(curMapJP, curMapForecast, elementID);
+						int m = commonUtil.getM(curMapJP, curMapForecast, elementID);
+						double divisor = 2*n0+2*n1+4*n2;
+						double deDivisor = n+n0+2*n1+4*n2+m;
+						double psVal = 100*divisor/deDivisor;
+						psVal = (int)(psVal*100)/100.0;
+						System.out.println(areaCode+":ps评分:"+psVal);
+						//入库
+						testService.insertMonthTestData(dpConn,elementID,strMakeDate,strForecastDate,testName,method,areaCode,psVal);
+					}
+				}
+			}
+		}
+		dpConn.close();
+		ws.Destroy();
+		logger.info(strForecastDate+"数据检验完成!");
+	}
+	private static double getMonthAvg(MonthAvg monthAvg,int month){
+		double val = 0;
+		switch(month){
+			case 1:
+				val = monthAvg.getM1();
+				break;
+			case 2:
+				val = monthAvg.getM2();
+				break;
+			case 3:
+				val = monthAvg.getM3();
+				break;
+			case 4:
+				val = monthAvg.getM4();
+				break;
+			case 5:
+				val = monthAvg.getM5();
+				break;
+			case 6:
+				val = monthAvg.getM6();
+				break;
+			case 7:
+				val = monthAvg.getM7();
+				break;
+			case 8:
+				val = monthAvg.getM8();
+				break;
+			case 9:
+				val = monthAvg.getM9();
+				break;
+			case 10:
+				val = monthAvg.getM10();
+				break;
+			case 11:
+				val = monthAvg.getM11();
+				break;
+			case 12:
+				val = monthAvg.getM12();
+				break;
+			default:
+				break;
+		}
+		return val;
+	}
+	/**
+	 * @作者:杠上花
+	 * @日期:2018年1月27日
+	 * @修改日期:2018年1月27日
+	 * @参数:
+	 * @返回:
+	 * @说明:获取月平均数据
+	 */
+	private static List<MonthAvg> getAvgData(String elementID,DruidPooledConnection dpConn) throws Exception {
+		String tableName = elementID.equals("temp")?"t_month_temp":"t_month_rain";
+		String sql = "select * from v_month_prec_avg";
+		PreparedStatement ps = dpConn.prepareStatement(sql);
+		ResultSet rs = ps.executeQuery();
+		DBUtil dbUtil = new DBUtil();
+		List<MonthAvg> lsMonthAvg = dbUtil.populate(rs, MonthAvg.class);
+		rs.close();
+		ps.close();
+		if(lsMonthAvg.isEmpty()){
+			System.out.println("平均观测数据为空!");
+			return null;
+		}
+		return lsMonthAvg;
+	}
+}

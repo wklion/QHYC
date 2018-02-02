@@ -1,0 +1,108 @@
+package com.spd.qhyc.util;
+
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
+import com.mg.objects.DatasetRaster;
+import com.mg.objects.Scanline;
+
+public class CommonUtil {
+	static Logger logger = LogManager.getLogger("mylog");
+	/**
+	 * @作者:杠上花
+	 * @日期:2017年12月24日
+	 * @修改日期:2017年12月24日
+	 * @参数:
+	 * @返回:
+	 * @说明:判断是否是数字
+	 */
+	public static boolean isNumeric(char c){
+		Boolean result = false;
+		if (Character.isDigit(c)){
+			result = true;
+		}
+		return result;
+	}
+	/**
+	 * @作者:杠上花
+	 * @日期:2017年12月24日
+	 * @修改日期:2017年12月24日
+	 * @参数:
+	 * @返回:
+	 * @说明:格点加法
+	 */
+	public double[][] TwoGridAdd(DatasetRaster dr1,DatasetRaster dr2) {
+		int cols1 = dr1.GetWidth();
+		int rows1 = dr1.GetHeight();
+		int cols2 = dr2.GetWidth();
+		int rows2 = dr2.GetHeight();
+		if(cols1 != cols1||rows1!=rows2) {
+			logger.error("格点行列数据不相等，不能相加!");
+			return null;
+		}
+		Scanline sl1 = new Scanline(dr1.GetValueType(),cols1);
+		Scanline sl2 = new Scanline(dr2.GetValueType(),cols2);
+		double[][] result = new double[rows1][cols1];
+		for(int r=0;r<rows1;r++) {
+			dr1.GetScanline(0, r, sl1);
+			dr2.GetScanline(0, r, sl2);
+			for(int c=0;c<cols1;c++) {
+				double val1 = sl1.GetValue(c);
+				double val2 = sl2.GetValue(c);
+				double avg = (val1+val2)/2;
+				result[r][c] = avg;
+			}
+		}
+		return result;
+	}
+	/**
+	 * @作者:杠上花
+	 * @日期:2017年12月24日
+	 * @修改日期:2017年12月24日
+	 * @参数:
+	 * @返回:
+	 * @说明:数组加格点
+	 */
+	public void ArrayAddGrid(double[][] arr,DatasetRaster dr) {
+		int arrRows = arr.length;
+		int arrCols = arr[0].length;
+		int drCols = dr.GetWidth();
+		int drRows = dr.GetHeight();
+		if(arrRows != drRows||arrCols!=drCols) {
+			logger.error("格点行列数据不相等，不能相加!");
+			return;
+		}
+		Scanline sl = new Scanline(dr.GetValueType(),drCols);
+		for(int r=0;r<drRows;r++) {
+			dr.GetScanline(0, r, sl);
+			for(int c=0;c<drCols;c++) {
+				double val1 = arr[r][c];
+				double val2 = sl.GetValue(c);
+				double avg = (val1+val2)/2;
+				arr[r][c] = avg;
+			}
+		}
+	}
+	/**
+	 * @作者:杠上花
+	 * @日期:2017年12月24日
+	 * @修改日期:2017年12月24日
+	 * @参数:
+	 * @返回:
+	 * @说明:数组加格点
+	 */
+	public double[][] ConvertGridToArray(DatasetRaster dr) {
+		int cols = dr.GetWidth();
+		int rows = dr.GetHeight();
+		Scanline sl = new Scanline(dr.GetValueType(),cols);
+		double[][] result = new double[rows][cols];
+		for(int r=0;r<rows;r++) {
+			dr.GetScanline(0, r, sl);
+			for(int c=0;c<cols;c++) {
+				double val = sl.GetValue(c);
+				result[r][c] = val;
+			}
+		}
+		return result;
+	}
+}

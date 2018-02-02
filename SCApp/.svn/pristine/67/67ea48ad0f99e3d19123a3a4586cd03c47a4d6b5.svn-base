@@ -1,0 +1,65 @@
+package com.spd.qhyc.util;
+
+import com.weathermap.objects.Analyst;
+import com.weathermap.objects.Dataset;
+import com.weathermap.objects.DatasetRaster;
+import com.weathermap.objects.Datasource;
+import com.weathermap.objects.Workspace;
+
+/**
+ * @作者:杠上花
+ * @日期:2018年1月17日
+ * @公司:spd
+ * @说明:
+*/
+public class GridUtil {
+	/**
+	 * @作者:杠上花
+	 * @日期:2018年1月17日
+	 * @修改日期:2018年1月17日
+	 * @参数:
+	 * @返回:
+	 * @说明:计算二个格点
+	 */
+	public void calRaster(Workspace ws,DatasetRaster dr1,DatasetRaster dr2,String outputDS,String outputDG,String exp){
+		Analyst pAnalyst = Analyst.CreateInstance("RasterCalc", ws);
+		pAnalyst.SetPropertyValue("Expression", exp);
+		//设置输入数据
+		String strJson = "{\"Datasource\":\"" + dr1.GetDatasource().GetAlias() + "\",\"Dataset\":\"" + dr1.GetName() + "\"}";
+        pAnalyst.SetPropertyValue("a", strJson);
+        strJson = "{\"Datasource\":\"" + dr2.GetDatasource().GetAlias() + "\",\"Dataset\":\"" + dr2.GetName() + "\"}";
+        pAnalyst.SetPropertyValue("b", strJson);
+        
+        strJson = "{\"Datasource\":\""+outputDS+"\",\"Dataset\":\""+outputDG+"\"}";
+        pAnalyst.SetPropertyValue("Output", strJson);
+        pAnalyst.Execute();
+        pAnalyst.Destroy();
+	}
+	/**
+	 * @作者:杠上花
+	 * @日期:2018年1月16日
+	 * @修改日期:2018年1月16日
+	 * @参数:
+	 * @返回:
+	 * @说明:栅格裁剪
+	 */
+	public void GridClip(Workspace ws,String srcDSName,String srcDGName,String outDSName,String outDGName){
+		Analyst pAnalystRasterClip = Analyst.CreateInstance("RasterClip", ws);
+		String strJson = String.format("{\"Datasource\":\"%s\",\"Dataset\":\"%s\"}", srcDSName, srcDGName);
+		pAnalystRasterClip.SetPropertyValue("Input", strJson);
+		String classPath = Thread.currentThread().getContextClassLoader().getResource("").getPath().substring(1);
+		String strClipFile = classPath + "T_CLIP.shp";
+		strJson = "{\"Type\":\"ESRI Shapefile\",\"Alias\":\"dsClip\",\"Server\":\""+strClipFile+"\"}";
+		Datasource dsClip = ws.OpenDatasource(strJson);
+		Dataset dtClip = dsClip.GetDataset(0);
+		strJson = String.format("{\"Datasource\":\"%s\",\"Dataset\":\"%s\"}", dsClip.GetAlias(), dtClip.GetName());
+		pAnalystRasterClip.SetPropertyValue("ClipRegion", strJson);
+		strJson = String.format("{\"Type\":\"Memory\",\"Alias\":\"%s\",\"Server\":\"\"}", outDSName);
+		Datasource dsRasterClip = ws.CreateDatasource(strJson);
+		strJson = String.format("{\"Datasource\":\"%s\",\"Dataset\":\"%s\"}", dsRasterClip.GetAlias(), outDGName);
+		pAnalystRasterClip.SetPropertyValue("Output", strJson);
+        pAnalystRasterClip.Execute();
+        pAnalystRasterClip.Destroy();
+        ws.CloseDatasource(dsClip.GetAlias());//关掉裁剪失量数据
+	}
+}

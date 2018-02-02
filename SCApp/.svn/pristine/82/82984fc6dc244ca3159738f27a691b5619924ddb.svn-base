@@ -1,0 +1,34 @@
+package com.spd.qhyc.config;
+
+import java.io.File;
+
+import com.google.gson.Gson;
+import com.spd.qhyc.file.FileHelper;
+import com.spd.qhyc.model.Config;
+
+/**
+ * @作者:wangkun
+ * @日期:2017年12月5日
+ * @公司:spd
+ * @说明:
+*/
+public class ConfigHelper {
+	private Config config;
+	private static String root=Thread.currentThread().getContextClassLoader().getResource("").getPath().substring(1);
+	public Config getConfig(){
+		if(config==null){
+			String strFile = root+"/config.json";
+			File file = new File(strFile);
+			FileHelper fileHelper = new FileHelper();
+			Gson gson = new Gson();
+			Config config = null;
+			try {
+				String str = fileHelper.readFile(strFile);
+				config = gson.fromJson(str, Config.class);
+			} catch (Exception e) {
+				e.printStackTrace();
+			}
+		}
+		return config;
+	}
+}

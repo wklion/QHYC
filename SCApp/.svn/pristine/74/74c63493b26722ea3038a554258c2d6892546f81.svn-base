@@ -1,0 +1,17 @@
+{
+	startYear:1981,
+	dataOutputPath:"E:/SC/Surport/",
+	monthPrecJPFileName:"guance_r.txt",
+	monthTempJPFileName:"guance_t.txt",
+	cimissHost:"10.158.89.55"
+	cimissUserID:"BENN_QXT_SPD",
+	cimissPassword:"5840232",
+	areaCodes:"500000,510000,520000,530000,540000",
+	cimissHost:"10.158.89.55",
+	hgtAvgPath:"E:/SC/Data/Mode/HeightAvg/month/500/",
+	hgtJPPath:"E:/SC/Data/Mode/HgtMonthJP/month/500/"
+	tempDatagramPath:"E:/SC/Data/Datagram/Temp/",
+	precDatagramPath:"E:/SC/Data/Datagram/Prec/",
+	modeHeightPath:"E:/SC/Data/Height/month/",
+	liveHeightFile"E:/SC/Data/Height/hgt.mon.mean.nc"
+}

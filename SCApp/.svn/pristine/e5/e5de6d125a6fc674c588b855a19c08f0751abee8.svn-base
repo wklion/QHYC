@@ -1,0 +1,108 @@
+package com.spd.qhyc.util;
+
+import java.awt.geom.Point2D;
+import java.io.File;
+import java.util.List;
+
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
+import com.spd.qhyc.model.Config;
+import com.spd.qhyc.model.XNStation;
+import com.weathermap.objects.Analyst;
+import com.weathermap.objects.Dataset;
+import com.weathermap.objects.DatasetRaster;
+import com.weathermap.objects.Datasource;
+import com.weathermap.objects.Workspace;
+
+/**
+ * @作者:杠上花
+ * @日期:2018年1月17日
+ * @公司:spd
+ * @说明:
+*/
+public class GridUtil {
+	static Logger logger = LogManager.getLogger("mylog");
+	/**
+	 * @作者:杠上花
+	 * @日期:2018年1月17日
+	 * @修改日期:2018年1月17日
+	 * @参数:
+	 * @返回:
+	 * @说明:计算二个格点
+	 */
+	public void calRaster(Workspace ws,DatasetRaster dr1,DatasetRaster dr2,String outputDS,String outputDG,String exp){
+		Analyst pAnalyst = Analyst.CreateInstance("RasterCalc", ws);
+		pAnalyst.SetPropertyValue("Expression", exp);
+		//设置输入数据
+		String strJson = "{\"Datasource\":\"" + dr1.GetDatasource().GetAlias() + "\",\"Dataset\":\"" + dr1.GetName() + "\"}";
+        pAnalyst.SetPropertyValue("a", strJson);
+        strJson = "{\"Datasource\":\"" + dr2.GetDatasource().GetAlias() + "\",\"Dataset\":\"" + dr2.GetName() + "\"}";
+        pAnalyst.SetPropertyValue("b", strJson);
+        
+        strJson = "{\"Datasource\":\""+outputDS+"\",\"Dataset\":\""+outputDG+"\"}";
+        pAnalyst.SetPropertyValue("Output", strJson);
+        pAnalyst.Execute();
+        pAnalyst.Destroy();
+	}
+	/**
+	 * @作者:杠上花
+	 * @日期:2018年1月16日
+	 * @修改日期:2018年1月16日
+	 * @参数:
+	 * @返回:
+	 * @说明:栅格裁剪
+	 */
+	public void GridClip(Workspace ws,String srcDSName,String srcDGName,String outDSName,String outDGName){
+		Analyst pAnalystRasterClip = Analyst.CreateInstance("RasterClip", ws);
+		String strJson = String.format("{\"Datasource\":\"%s\",\"Dataset\":\"%s\"}", srcDSName, srcDGName);
+		pAnalystRasterClip.SetPropertyValue("Input", strJson);
+		String classPath = Thread.currentThread().getContextClassLoader().getResource("").getPath().substring(1);
+		String strClipFile = classPath + "T_CLIP.shp";
+		strJson = "{\"Type\":\"ESRI Shapefile\",\"Alias\":\"dsClip\",\"Server\":\""+strClipFile+"\"}";
+		Datasource dsClip = ws.OpenDatasource(strJson);
+		Dataset dtClip = dsClip.GetDataset(0);
+		strJson = String.format("{\"Datasource\":\"%s\",\"Dataset\":\"%s\"}", dsClip.GetAlias(), dtClip.GetName());
+		pAnalystRasterClip.SetPropertyValue("ClipRegion", strJson);
+		strJson = String.format("{\"Type\":\"Memory\",\"Alias\":\"%s\",\"Server\":\"\"}", outDSName);
+		Datasource dsRasterClip = ws.CreateDatasource(strJson);
+		strJson = String.format("{\"Datasource\":\"%s\",\"Dataset\":\"%s\"}", dsRasterClip.GetAlias(), outDGName);
+		pAnalystRasterClip.SetPropertyValue("Output", strJson);
+        pAnalystRasterClip.Execute();
+        pAnalystRasterClip.Destroy();
+        ws.CloseDatasource(dsClip.GetAlias());//关掉裁剪失量数据
+	}
+	public double[][] getMonthHosStationFromGrid(Workspace ws,int month,Config config,String elementID,List<XNStation> lsXNStation){
+		String strFile = "";
+		strFile = elementID.equals("Temp")?config.getHosTempFile():config.getHosPrecFile();
+		File filePath = new File(strFile);
+		if(!filePath.exists()){
+			logger.error("不存在文件："+strFile);
+			return null;
+		}
+		String strMonth = month<10?"0"+month:month+"";
+		String fileF = elementID.toLowerCase().equals("temp")?"SURF_CLI_CHN_TEM_MON_GRID_0.5-MEAN-%s.txt":"SURF_CLI_CHN_PRE_MON_GRID_0.5-%s.txt";
+		int stationCount = lsXNStation.size();
+		double[][] result = new double[stationCount][30];
+		
+		String strJson = "{\"Type\":\"netCDF\",\"Alias\":\"mode\",\"Server\":\"" + strFile + "\"}";
+		Datasource ds = ws.OpenDatasource(strJson);
+		for(int i=0;i<30;i++){
+			int index = i*12+month-1;
+			DatasetRaster dr = (DatasetRaster) ds.GetDataset(i);
+			dr.CalcExtreme();
+			for(int j=0;j<stationCount;j++){
+				XNStation xnStation = lsXNStation.get(j);
+				double lon = xnStation.getLon();
+				double lat = xnStation.getLat();
+				Point2D p2d=new Point2D.Double(lon,lat);
+				Point2D cell=dr.PointToCell(p2d);
+				int x=(int) cell.getX();
+				int y=(int) cell.getY();
+				double val=dr.GetValue(x, y);//此格点值
+				result[j][i] = val;
+			}
+		}
+		return result;
+	}
+}

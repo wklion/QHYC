@@ -1,0 +1,10 @@
+{
+	startYear:1981,
+	dataOutputPath:"E:/SC/Surport/",
+	monthPrecJPFileName:"",
+	monthTempJPFileName:"",
+	cimissUserID:"BENN_QXT_SPD",
+	cimissPassword:"5840232",
+	areaCodes:"500000,510000,520000,530000,540000",
+	cimissHost:"10.158.89.55"
+}

@@ -1,0 +1,30 @@
+package com.spd.qhyc.app;
+
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
+import com.alibaba.druid.pool.DruidDataSource;
+import com.alibaba.druid.pool.DruidPooledConnection;
+import com.spd.qhyc.config.ConfigHelper;
+import com.spd.qhyc.database.DataSourceSingleton;
+import com.spd.qhyc.model.Config;
+
+public class DynamicEquation {
+	static Logger logger = LogManager.getLogger("mylog");
+	public static void main(String[] args) {
+		//需要参数(预报数据年月,预报月份)
+		String strStartDate = "20170901";//预报数据日期
+		int forcastMonth = 10;//预报月份
+		// 2、连接数据库
+		DruidDataSource dds = DataSourceSingleton.getInstance();
+		DruidPooledConnection dpConn = null;
+		try {
+			dpConn = dds.getConnection();
+		} catch (Exception e) {
+			logger.error(e.getMessage());
+		}
+		// 3、获取配置
+		ConfigHelper configHelper = new ConfigHelper();
+		Config config = configHelper.getConfig();
+	}
+}

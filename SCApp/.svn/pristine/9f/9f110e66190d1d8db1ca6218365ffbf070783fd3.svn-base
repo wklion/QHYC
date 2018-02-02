@@ -1,0 +1,413 @@
+package com.spd.qhyc.app;
+
+import java.awt.geom.Point2D;
+import java.io.File;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.util.ArrayList;
+import java.util.Calendar;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+import org.codehaus.jettison.json.JSONObject;
+
+import com.alibaba.druid.pool.DruidDataSource;
+import com.alibaba.druid.pool.DruidPooledConnection;
+import com.mathworks.toolbox.javabuilder.MWClassID;
+import com.mathworks.toolbox.javabuilder.MWNumericArray;
+import com.spd.qhyc.application.WorkspaceHelper;
+import com.spd.qhyc.config.ConfigHelper;
+import com.spd.qhyc.database.DataSourceSingleton;
+import com.spd.qhyc.file.FileHelper;
+import com.spd.qhyc.model.Config;
+import com.spd.qhyc.model.MonthAvg;
+import com.spd.qhyc.model.SimpleStationVal;
+import com.spd.qhyc.model.XNStation;
+import com.spd.qhyc.util.CommonUtil;
+import com.spd.qhyc.util.DBHelper;
+import com.spd.qhyc.util.DBUtil;
+import com.spd.qhyc.util.DateUtil;
+import com.spd.qhyc.util.StationUtil;
+import com.mg.objects.Dataset;
+import com.mg.objects.DatasetRaster;
+import com.mg.objects.Datasource;
+import com.mg.objects.Workspace;
+
+import EOFCCA.EofCca;
+
+public class EofCcaApp {
+	static Logger logger = LogManager.getLogger("mylog");
+	public static void main(String[] args) throws Exception {
+		Workspace ws = WorkspaceHelper.getWorkspace();
+		String[] elements = {"temp","prec"};
+		String strStartDate = "";//预报数据日期
+		if(args.length>1) {
+			strStartDate = args[0];
+		}
+		else {
+			//Calendar cal = Calendar.getInstance();
+			//strStartDate = DateUtil.format("yyyyMMdd", cal);
+			strStartDate = "2017-09-01";
+		}
+		// 2、连接数据库
+		logger.info("2、连接数据库");
+		DruidDataSource dds = DataSourceSingleton.getInstance();
+		DruidPooledConnection dpConn = null;
+		try {
+			dpConn = dds.getConnection();
+		} catch (Exception e) {
+			logger.error(e.getMessage());
+		}
+		// 3、获取配置
+		ConfigHelper configHelper = new ConfigHelper();
+		Config config = configHelper.getConfig();
+		//3、获取站点数据
+		logger.info("3、获取站点数据");
+        StationUtil stationUtil = new StationUtil();
+        List<XNStation> lsXNStation = stationUtil.GetXNSatation("",dpConn);
+		for(String elementID:elements) {
+			logger.info("开始预测:"+elementID);
+			Calendar calStart = DateUtil.parse("yyyy-MM-dd", strStartDate);
+			Calendar calForecast = (Calendar) calStart.clone();
+			//获取预测时间
+			String[] strForecastDates = new String[13];
+			for(int m=0;m<13;m++) {
+				String strForecastDate = DateUtil.format("yyyyMM", calForecast);
+				strForecastDates[m] = strForecastDate;
+				calForecast.add(Calendar.MONTH, 1);
+			}
+			String strForecastDate = DateUtil.format("yyyyMM", calForecast);
+			logger.info("起报:"+strStartDate+",预报:"+strForecastDate);
+			Map<String,List<Double>> mapLiveData = getPastMonthData(calStart, 12, elementID, dpConn);
+			 //6、处理实况数据中的站点，以西南站点表作为基础,并选出所用站
+	        List<XNStation> selectStation = new ArrayList();//选出站点
+	        for(XNStation xnStation:lsXNStation){
+	        	String stationNum = xnStation.getStation_Id_C();
+	        	List<Double> lsData = mapLiveData.get(stationNum);
+	        	if(lsData != null){
+	        		selectStation.add(xnStation);
+	        	}
+	        }
+	        int selectStationCount = selectStation.size();
+	        //7、获取实况模式站点数据
+	        Map<String,List<Double>> mapModeData = getModeStationData(ws, calStart, 12, config, selectStation);
+	        //8、获取预报模式数据
+	        Map<String,List<Double>> mapLiveModeData = getForecastModeStationData(ws, calStart, strForecastDates, config, selectStation);
+	        //9、数据转换成数组
+	        double[][] liveData = new double[selectStationCount][12];//需传递的实况观测数组
+	        double[][] liveMode = new double[selectStationCount][12];//需传递的实况模式数组
+	        double[][] liveForecastMode = new double[selectStationCount][strForecastDates.length];//需传递的实况模式数组
+	        int index = 0;
+	        for(XNStation xnStation:selectStation){
+	        	String strStationNum = xnStation.getStation_Id_C();
+	        	List<Double> lsData = mapLiveData.get(strStationNum);
+	        	int size = lsData.size();
+				for(int i=0;i<size;i++){
+					liveData[index][i] = lsData.get(i);
+				}
+				index++;
+	        }
+	        index = 0;
+	        for(String key:mapModeData.keySet()){
+	        	List<Double> lsData = mapModeData.get(key);
+	        	if(lsData == null){
+	        		continue;
+	        	}
+	        	int size = lsData.size();
+				for(int i=0;i<size;i++){
+					liveMode[index][i] = lsData.get(i);
+				}
+				index++;
+	        }
+	        index = 0;
+	        for(String key:mapLiveModeData.keySet()){
+	        	List<Double> lsData = mapLiveModeData.get(key);
+	        	if(lsData == null){
+	        		continue;
+	        	}
+	        	int size = lsData.size();
+				for(int i=0;i<size;i++){
+					liveForecastMode[index][i] = lsData.get(i);
+				}
+				index++;
+	        }
+	        //10、预报
+	        MWNumericArray MWHosLive = new MWNumericArray(liveData, MWClassID.DOUBLE);//历史实况
+			MWNumericArray MWHosModel = new MWNumericArray(liveMode, MWClassID.DOUBLE);//历史模式
+			MWNumericArray MWForModel = new MWNumericArray(liveForecastMode, MWClassID.DOUBLE);//预报模式
+			//临时
+			//FileHelper fileHelper = new FileHelper();
+			//fileHelper.writeToFile(liveData, "C:/Users/lenovo/Desktop/temp/hosLive.txt");
+			//fileHelper.writeToFile(liveMode, "C:/Users/lenovo/Desktop/temp/hosMode.txt");
+			//fileHelper.writeToFile(liveForecastMode, "C:/Users/lenovo/Desktop/temp/forecastMode.txt");
+			EofCca eofcca = null;
+			int forecastSize = strForecastDates.length;
+			double[][] forecastData = new double[selectStationCount][forecastSize];
+			try{
+				eofcca = new EofCca();
+				Object[] obj = eofcca.EOFCCA(1,5, 5,MWHosLive,MWHosModel,MWForModel);
+				MWNumericArray wmArray = (MWNumericArray) obj[0];
+				for(int c = 0;c<forecastSize;c++){
+					for(int r=0;r<selectStationCount;r++){
+						int tempIndex = c*r+r+1;
+						double val = wmArray.getDouble(tempIndex);
+						val = (int)val/10.0;
+						forecastData[r][c] = val;
+					}
+				}
+			}
+			catch(Exception ex){
+			}
+			//入库
+			DBHelper dbHelper = new DBHelper();
+			List<MonthAvg> lsMonthAvg = dbHelper.getMonthAvg(dpConn, elementID);//获取当前月的历史平均
+			//转成Map
+			Map<String,Double[]> mapMonthAvg = new HashMap();
+			for(MonthAvg ma:lsMonthAvg){
+			    String stationNum = ma.getStationnum();
+			    Double[] vals = new Double[12];
+			    vals[0] = ma.getM1();
+			    vals[1] = ma.getM2();
+			    vals[2] = ma.getM3();
+			    vals[3] = ma.getM4();
+			    vals[4] = ma.getM5();
+			    vals[5] = ma.getM6();
+			    vals[6] = ma.getM7();
+			    vals[7] = ma.getM8();
+			    vals[8] = ma.getM9();
+			    vals[9] = ma.getM10();
+			    vals[10] = ma.getM11();
+			    vals[11] = ma.getM12();
+			    mapMonthAvg.put(stationNum, vals);
+			}
+			for(int i=0;i<forecastSize;i++){
+			    List<StationVal> lsResult = new ArrayList();
+	            StationVal sv = null;
+	            String strforecastData = strForecastDates[i];
+	            Calendar tempCalForecast = DateUtil.parse("yyyyMM", strforecastData);
+	            int month = tempCalForecast.get(Calendar.MONTH)+1;
+			    for(int j=0;j<selectStationCount;j++){
+			        sv = new StationVal();
+			        XNStation xnStation = selectStation.get(j);
+			        String strStationNum = xnStation.getStation_Id_C();
+			        Double[] avgData = mapMonthAvg.get(strStationNum);
+			        if(avgData == null){
+			            continue;
+			        }
+			        double val = forecastData[j][i];
+			        double avgVal = avgData[month-1];
+			        double jpVal = 0;
+			        if(elementID.equals("temp")){
+			            jpVal = val - avgVal;
+			        }
+			        else{
+			            jpVal = (val - avgVal)/avgVal;
+			        }
+			        jpVal = (int)(jpVal*100)/100.0;
+			        sv.setValue(jpVal);
+			        sv.setLongitude(xnStation.getLon());
+	                sv.setLatitude(xnStation.getLat());
+	                sv.setStationNum(xnStation.getStation_Name());
+	                sv.setStationNum(xnStation.getStation_Id_C());
+	                lsResult.add(sv);
+			    }
+			    dbHelper.insertMonthForecastData(dpConn, lsResult, elementID, calStart, tempCalForecast,"EOF-CCA");
+			}
+		}
+		logger.info("预报制作完成!");
+		dpConn.close();
+		System.out.println("over");
+	}
+	/**
+	 * @作者:杠上花
+	 * @日期:2018年1月21日
+	 * @修改日期:2018年1月21日
+	 * @参数:cal-资料日期,month-过去多少月资料,elementID-要素ID,conn-数据库连接
+	 * @返回:
+	 * @说明:获取过去多少个月的月数据
+	 */
+	private static Map<String,List<Double>> getPastMonthData(Calendar cal,int month,String elementID,DruidPooledConnection conn){
+		Calendar calTemp = (Calendar) cal.clone();
+		calTemp.add(Calendar.MONTH, -1);
+		String sqlF = "select stationnum,%s as stationVal from %s where year=%d";
+		String tableName = elementID.equals("temp")?"t_month_temp":"t_month_rain";
+		List<List<SimpleStationVal>> lsStationVals = new ArrayList();
+		DBUtil dbUtil = new DBUtil();
+		try{
+			while(month>0){
+				int curMonth = calTemp.get(Calendar.MONTH)+1;
+				String monthField = "m"+curMonth;
+				int year = calTemp.get(Calendar.YEAR);
+				String sql = String.format(sqlF, monthField,tableName,year);
+				PreparedStatement ps = conn.prepareStatement(sql);
+				ResultSet rs=ps.executeQuery();
+				List<SimpleStationVal> lsSimpleStationVal = dbUtil.populate(rs, SimpleStationVal.class);
+				lsStationVals.add(lsSimpleStationVal);
+				calTemp.add(Calendar.MONTH, -1);
+				month--;
+			}
+		}
+		catch(Exception ex){
+			
+		}
+		Map<String,List<Double>> mapResult = new HashMap();
+		int size = lsStationVals.size();
+		for(int i = size-1;i>=0;i--){
+			List<SimpleStationVal> lsSimpleStationVal = lsStationVals.get(i);
+			for(SimpleStationVal ssv:lsSimpleStationVal){
+				String strStationNum = ssv.getStationNum();
+				double val = ssv.getStationVal();
+				if(i == size-1){
+					List<Double> tempLS = new ArrayList();
+					tempLS.add(val);
+					mapResult.put(strStationNum, tempLS);
+				}
+				else{
+					List<Double> tempLS = mapResult.get(strStationNum);
+					if(tempLS != null){
+						tempLS.add(val);
+					}
+				}
+			}
+		}
+		return mapResult;
+	}
+	/**
+	 * @作者:杠上花
+	 * @日期:2018年1月21日
+	 * @修改日期:2018年1月21日
+	 * @参数:
+	 * @返回:
+	 * @说明:获取预报模式数据
+	 */
+	private static Map<String,List<Double>> getModeStationData(Workspace ws,Calendar cal,int month,Config config,List<XNStation> lsXNStation){
+		Calendar calTemp = (Calendar) cal.clone();
+		calTemp.add(Calendar.MONTH, -month);
+		String strLiveModeFile = config.getLiveHeightFile();
+		File file = new File(strLiveModeFile);
+		if(!file.exists()){
+			logger.error("月高度场文件不存在!");
+			return null;
+		}
+		String heightAlias = "height"+DateUtil.format("HHmmss", Calendar.getInstance());
+        String strJson = "{\"Type\":\"netCDF\",\"Alias\":\""+heightAlias+"\",\"Server\":\"" + strLiveModeFile + "\"}";
+        Datasource ds = ws.OpenDatasource(strJson);
+        int startYear = 1948;
+        int targetLevel = 500;
+        int dsCount = ds.GetDatasetCount();
+        JSONObject json = null;
+        int tempMonth = 1;
+        int forecastYear = calTemp.get(Calendar.YEAR);
+        int forecastMonth = calTemp.get(Calendar.MONTH) +1;
+        List<DatasetRaster> lsDR = new ArrayList();
+        int monthIndex = 1;
+        //选出dr
+        try{
+        	for(int i = 0;i<dsCount;i++){
+            	Dataset dataset = ds.GetDataset(i);
+            	String strMeta = dataset.GetMetadata();
+            	json = new JSONObject(strMeta);
+                int level = json.getInt("NETCDF_DIM_level");
+                if(level ==10){//最小
+                	tempMonth++;
+                }
+                if(tempMonth>12){
+                	tempMonth = 1;
+                    startYear++;
+                }
+                if(startYear == forecastYear && tempMonth == forecastMonth && level == targetLevel){
+                	DatasetRaster dr = (DatasetRaster) dataset;
+                	lsDR.add(dr);
+                	calTemp.add(Calendar.MONTH, 1);
+                	forecastYear = calTemp.get(Calendar.YEAR);
+                    forecastMonth = calTemp.get(Calendar.MONTH) +1;
+                    monthIndex++;
+                    if(monthIndex>month){
+                    	break;
+                    }
+                }
+            }
+        }
+        catch(Exception ex){
+        	
+        }
+        if(lsDR.size() != month){
+        	logger.error("模式资料无新数据!");
+			return null;
+        }
+        Map<String,List<Double>> mapData = new HashMap();
+        for(XNStation xnStation:lsXNStation){
+        	String stationNum = xnStation.getStation_Id_C();
+        	double lon = xnStation.getLon();
+        	double lat = xnStation.getLat();
+        	List<Double> lsData = new ArrayList();
+        	for(DatasetRaster dr:lsDR){
+        		Point2D p2d=new Point2D.Double(lon,lat);
+                Point2D cell=dr.PointToCell(p2d);
+                int x=(int) cell.getX();
+                int y=(int) cell.getY();
+                double val=dr.GetValue(x, y);//此格点值
+                lsData.add(val);
+        	}
+        	mapData.put(stationNum, lsData);
+        }
+        ws.CloseDatasource(heightAlias);
+        return mapData;
+	}
+	/**
+	 * @作者:杠上花
+	 * @日期:2018年1月21日
+	 * @修改日期:2018年1月21日
+	 * @参数:
+	 * @返回:
+	 * @说明:获取预报模式数据
+	 */
+	public static Map<String,List<Double>> getForecastModeStationData(Workspace ws,Calendar cal,String[] strForecastDate,Config config,List<XNStation> lsXNStation){
+		Calendar tempMakeDate = (Calendar) cal.clone();
+		String strMakeDate1 = DateUtil.format("yyyyMM", tempMakeDate);
+		String strMakeDate2 = strMakeDate1 + "01";
+		tempMakeDate.add(Calendar.YEAR, 1);
+		String strEndDate = DateUtil.format("yyyyMM", tempMakeDate);
+		tempMakeDate.add(Calendar.YEAR, -1);//减回来
+		String modeFileFormat = "%s.atm.Z3.%s-%s_prs0500_member.nc";
+		String fileName = String.format(modeFileFormat, strMakeDate2,strMakeDate1,strEndDate);
+		String path = config.getModeHeightPath();
+		String strHgtFile = path + fileName;
+		String modeAlias = "mode"+DateUtil.format("HHmmss", Calendar.getInstance());
+        String strJson = "{\"Type\":\"netCDF\",\"Alias\":\""+modeAlias+"\",\"Server\":\"" + strHgtFile + "\"}";
+        Datasource ds = ws.OpenDatasource(strJson);
+        int dsCount = ds.GetDatasetCount();
+        List<DatasetRaster> lsDR = new ArrayList();
+        for(int i = 0;i<dsCount;i++){
+        	String strDate = DateUtil.format("yyyyMM", tempMakeDate);
+        	Boolean isContain = CommonUtil.ArrayIsContain(strForecastDate, strDate);
+        	if(isContain){
+        		DatasetRaster dr = (DatasetRaster) ds.GetDataset(i);
+        		lsDR.add(dr);
+        	}
+        	tempMakeDate.add(Calendar.MONTH, 1);
+        	i += 24;//只取第一层
+        }
+        Map<String,List<Double>> mapData = new HashMap();
+        for(XNStation xnStation:lsXNStation){
+        	String stationNum = xnStation.getStation_Id_C();
+        	double lon = xnStation.getLon();
+        	double lat = xnStation.getLat();
+        	List<Double> lsData = new ArrayList();
+        	for(DatasetRaster dr:lsDR){
+        		Point2D p2d=new Point2D.Double(lon,lat);
+                Point2D cell=dr.PointToCell(p2d);
+                int x=(int) cell.getX();
+                int y=(int) cell.getY();
+                double val=dr.GetValue(x, y);//此格点值
+                lsData.add(val);
+        	}
+        	mapData.put(stationNum, lsData);
+        }
+        ws.CloseDatasource(modeAlias);
+        return mapData;
+	}
+}
