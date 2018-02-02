@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html>
+<head lang="en">
+    <meta charset="UTF-8">
+    <link rel="stylesheet" href="css/login.css" type="text/css" media="screen"/>
+    <script type="text/javascript" src="js/jquery.js"></script>
+    <title>入口导航</title>
+	<script type="text/javascript">
+        $(function(){
+            $("#div_njy").click(function(){
+                window.location.href="njy.html";
+            });
+            $("#div_zdfx").click(function(){
+                window.location.href="zdfx.html";
+            });
+            $("#div_ysq").click(function(){
+			    window.location.href="land.html";
+			});
+            $("#div_display").click(function(){
+                window.location.href="display.html";
+            });
+            $(".menuDiv").hover(function(){
+                var $this = $(this).find("img");
+                $this.css("box-shadow","3px 3px 4px 1px #555");
+            },function(){
+                var $this = $(this).find("img");
+                $this.css("box-shadow","");
+            });
+        });
+    </script>
+</head>
+<body style="height: 100%;margin: 0px;overflow: hidden;font-family: Microsoft YaHei;">
+    <div class="loginBackground">
+        <img src="imgs/login/bodyBackground.png" width="100%" height="100%" style="margin:0px;z-index: -1;background-image: linear-gradient(to bottom, #83c3ff 0px, #007df1 100%)">
+    </div>
+    <div class="loginBackground">
+        <img src="imgs/login/title.png" style="position: absolute;left: 50%;margin-left: -325px;top: 10%;">
+        <div style="position: absolute;width: 1200px;height: 282px;left:45%;top: 40%;margin-left: -500px;margin-top: 0px;">
+            <div class="menuDiv" id="div_njy" style="height: 200px;width: 160px;float: left;margin-top: 130px;cursor: pointer;">
+                <img src="imgs/login/hyg.png" height="160px;">
+                <div class="menuLink">年季月预测</div>
+            </div>
+            <div class="menuDiv" id="div_zdfx" style="height: 200px;width: 160px;float: left;margin-top: 0px;margin-left: 100px;cursor: pointer;">
+                <img src="imgs/login/hyg.png" height="160px;">
+                <div class="menuLink">诊断分析</div>
+            </div>
+            <div class="menuDiv" id="div_ysq" style="height: 200px;width: 160px;float: left;margin-top:0px;margin-left: 100px;cursor: pointer;">
+                <img src="imgs/login/ldg.png" height="160px;">
+                <div class="menuLink">延伸期预报</div>
+            </div>
+            <!-- <div class="menuDiv" id="div_dlg"  style="height: 200px;width: 160px;float: left;margin-left: 100px;cursor: pointer;">
+                <img src="imgs/login/dlg.png" height="160px;">
+                <div class="menuLink">短临岗</div>
+            </div>
+            <div class="menuDiv" id="div_sxg"  style="height: 200px;width: 160px;float: left;margin-top: 50px;margin-left: 100px;cursor: pointer;">
+                <img src="imgs/login/sxg.png" height="160px;">
+                <div class="menuLink">首席岗</div>
+            </div> -->
+            <div class="menuDiv" id="div_display"  style="height: 200px;width: 160px;float: left;margin-top: 130px;margin-left: 100px;cursor: pointer;">
+                <img src="imgs/login/display.png" height="160px;">
+                <div class="menuLink" style="text-align: center">产品展示</div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
